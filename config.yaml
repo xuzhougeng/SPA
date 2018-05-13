@@ -1,0 +1,15 @@
+# program
+REPEATMASKER: "~/opt/biosoft/RepeatMasker/RepeatMasker"
+BRAKER: "~/opt/biosoft/BRAKER_v2.1.0/braker.pl"
+Glimmer: "~/opt/biosoft/GlimmerHMM/bin/glimmerhmm_linux_x86_64"
+GlimmerHMM: "~/opt/biosoft/GlimmerHMM/trained_dir/arabidopsis/"
+SNAP: "~/opt/biosoft/SNAP/snap"
+SNAP_HMM: "~/opt/biosoft/SNAP/HMM/A.thaliana.hmm"
+BLAST_BIN: "~/opt/biosoft/ncbi-blast-2.7.1+/bin/"
+PASA_DIR: "~/opt/biosoft/PASApipeline/"
+EVIDENCE_DIR: "~/opt/biosoft/EVidenceModeler-1.1.1/"
+
+
+SAMPLES: "samples.txt"
+SPECIES: "Ahimalaica"
+PROTEIN_DB: "~/db/uniref90/uniref90.fasta"
