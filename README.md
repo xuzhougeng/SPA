@@ -1,6 +1,8 @@
 # SPA: A (s)nakemake based (p)lant genome (a)nnotation pipline
 
-This pipeline is designed for plant genome annotation, it relies on many existed tools,
+This pipeline is designed for plant genome annotation. 
+
+If you want to use this tool, you may need to read <https://github.com/xuzhougeng/Notebook/blob/master/Notes/Pipeline/How-to-annotate-plant-genome.md>. This documents or tutorial record the learning process when I learning genome annotaiton. 
 
 Becauses this pipeline is writed by Snakemake, you need install this excellent program firstly
 
@@ -9,6 +11,8 @@ conda install snakemake
 # or
 pip install snakemake
 ```
+
+You also need to install the following tools
 
 For RNA-seq data process:
 
