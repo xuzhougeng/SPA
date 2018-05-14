@@ -24,24 +24,6 @@ for line in file:
         bed_list = [dna, str(d_start), str(d_end), prt, "0", ordered]
         print("\t".join(bed_list))
         # sequence can be substract with bedtools getfasta , seqkits subseq.
-        """
-        import subprocess as sp
-        from os.path import join
-        genome  = sys.argv[2]
-        protein = sys.argv[3]
-        prefix = join("temp", "genewise", dna + "_" + str(d_start) + "_" +str(d_end))
-        os.makedirs(prefix, exist_ok=True)
-        # substract protein sequence
-        prtpath  = join(prefix, "prt.fa")
-        prtshell = "seqkit faidx {} {} -o {}".format(protein, prt, prtpath)
-        sp.run(prtshell, shell=True)
-        # substract dna sequence if reverse then reverse complement
-        dnapath  = join(prefix, "dna.fa")
-        region   = str(d_start) + "-" + str(d_end)
-        dnashell = "seqkit faidx {} {}:{} -o {}".format(genome, dna, region, dnapath )
-        sp.run(dnashell, shell=True)
-        """
-  
     if not unchange: # changed
         dna     = items[0]
         prt     = items[1]

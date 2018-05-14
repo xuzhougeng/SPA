@@ -1,6 +1,7 @@
 #!/usr/bin/env snakemake
 
 # import python module
+import os
 from os.path import join
 from os.path import abspath
 from os.path import basename
@@ -27,6 +28,7 @@ SAMPLES     = [line.strip() for line in open(config['SAMPLES'])]
 PROTEIN     = abspath(join("input","protein.fa"))
 
 # directory
+WORK_DIR       = os.getcwd()
 INPUT_DIR      = abspath("input")
 PREDICT_DIR    = abspath("prediction")
 RNA_SEQ_DIR    = abspath("RNA_seq")
@@ -44,13 +46,13 @@ ALL_BAM       = [join(RNA_SEQ_DIR, "{}_align.bam".format(sample)) for sample in 
 
 SNAP_GFF      = join(PREDICT_DIR, "ab_initio", "snap.gff")
 GLIMMER_GFF   = join(PREDICT_DIR, "ab_initio", "glimmer.gff")
-AUGUSTUS_GFF  = join(PREDICT_DIR, "ab_initio", "augustus","augustus.hints.gff")
+AUGUSTUS_GFF  = join(PREDICT_DIR, "ab_initio", "augustus","augustus.hints.gff3")
 GENEWISE_GFF  = join(PREDICT_DIR, "homology", "genewise.gff")
-PASA_GFF      = join(PREDICT_DIR, "PASA", SPECIES+"pasa_assemblies.gff3")
+PASA_GFF      = join(PREDICT_DIR, "PASA", SPECIES+".pasa_assemblies.gff3")
 EVM_GFF       = join(PREDICT_DIR, "EVM", "EVM.all.gff")
 rule all:
     input:
-        MASKED_GENOME, SNAP_GFF, GLIMMER_GFF, AUGUSTUS_GFF, GENEWISE_GFF
+        MASKED_GENOME, SNAP_GFF, GLIMMER_GFF, AUGUSTUS_GFF, GENEWISE_GFF, PASA_GFF, EVM_GFF
 
 # prepare the input from prediction
 ## genome mask with RepeatMasker
@@ -150,7 +152,7 @@ rule Augustus:
         species = SPECIES,
         outdir  = join(PREDICT_DIR,"ab_initio","augustus")
     output:
-        join(PREDICT_DIR, "ab_initio", "augustus","augustus.hints.gff")
+        join(PREDICT_DIR, "ab_initio", "augustus","augustus.hints.gff3")
     threads: 40
     shell:"""
     mkdir -p {params.outdir}
@@ -206,8 +208,11 @@ rule blastx2bed:
         join(PREDICT_DIR, "homology", "blastx_outfmt6.txt")
     output:
         join(PREDICT_DIR, "homology", "homology.bed")
+    message: "convert blastx result in format 6 to bed, and merge the nearest entry into single"
     shell:"""
-    python3 scripts/blastx2bed.py {input} > {output}
+    python3 scripts/blastx2bed.py {input} | bedtools sort -i - > {output}.tmp
+    python3 scripts/blastx_bed_merge.py {output}.tmp > {output}
+    rm -f {ouput}.tmp
     """
 
 rule parallel_wise:
@@ -219,8 +224,8 @@ rule parallel_wise:
         join(PREDICT_DIR, "homology", "genewise.gff")
     threads: 20
     shell:"""
-    python3 scripts/parallel_genewise.py input/genome.fa input/protein.fa prediction/homology/homology.bed
-    python3 scripts/merge_parallel_genewise_out.py > {output}
+    python3 scripts/parallel_genewise.py {input.ref} {input.prt} {input.bed}
+    python3 scripts/merge_parallel_genewise_out.py {input.bed} > {output}
     """
 
 ## PASA integration
@@ -234,14 +239,14 @@ rule pasa_integration:
         align    = "80",
         identity = "90"
     output:
-        join(PREDICT_DIR, "PASA", SPECIES+"pasa_assemblies.gff3")
+        join(PREDICT_DIR, "PASA", SPECIES+".pasa_assemblies.gff3")
     threads: 20
     shell:"""
     mkdir -p {params.wkdir}
     cd {params.wkdir}   
     cp -f {PASA_DIR}/pasa_conf/pasa.alignAssembly.Template.txt aligAssembly.config
     sed -i -e 's/<__DATABASE__>/{params.species}/' \
-        -e 's/<__MIN_PERCENT_ALIGNED__>/{parans.align}/' \
+        -e 's/<__MIN_PERCENT_ALIGNED__>/{params.align}/' \
         -e  's/<__MIN_AVG_PER_ID__>/{params.identity}/' alignAssembly.config
     {PASA_DIR}/scripts/Launch_PASA_pipeline.pl -c alignAssembly.config -C -R \
         -g {input.ref} -t {input.transcript} --CPU {threads} --ALIGNERS blat,gmap
@@ -252,6 +257,7 @@ rule EvidenceModeler_Prepartion:
     input:
         ref      = REFERENCE,
         snap     = SNAP_GFF,
+        genewise = GENEWISE_GFF,
         glimmer  = GLIMMER_GFF,
         augustus = AUGUSTUS_GFF,
         pasa     = PASA_GFF
@@ -263,14 +269,15 @@ rule EvidenceModeler_Prepartion:
         join(PREDICT_DIR, "EVM", "weights.txt") 
     shell:"""
     mkdir -p {params.wkdir}
-    python scripts/glimmer2gff3.py {input.glimmer} > {params.wkidr}/glimmer.gff3 
-    python scripts/snap2gff3.py {input.snap} > {params.wkdir}/snap.gff3
+    python {WORK_DIR}/scripts/glimmer2gff3.py {input.glimmer} > {params.wkdir}/glimmer.gff3 
+    python {WORK_DIR}/scripts/snap2gff3.py {input.snap} > {params.wkdir}/snap.gff3
+    python {WORK_DIR}/scripts/wise2gff3.py {input.genewise} > {params.wkdir}/genewise.gff3
     ln {input.augustus} {params.wkdir}/augustus.gff3
     ln {input.pasa} {params.wkdir}/transcript_alignments.gff3
     cd {params.wkdir}
-    cat {params.wkdir}/augustus.gff3 {params.wkidr}/glimmer.gff3 {params.wkdir}/snap.gff3 > gene_prediction.gff3
-    echo -e "ABINITIO_PREDICTION\tAUGUSTUS\t4\nABINITIO_PREDICTION\tSNAP\t1\nABINITIO_PREDICTION\tGlimmerHMM\t1" > weights.txt
-    echo -e "TRANSCRIPT\tassembler-{SPECIES}\t5" >> weights.txt
+    cat {params.wkdir}/augustus.gff3 {params.wkdir}/glimmer.gff3 {params.wkdir}/snap.gff3 {params.wkdir}/genewise.gff3 > gene_prediction.gff3
+    echo -e 'ABINITIO_PREDICTION\\tAUGUSTUS\\t3\\nABINITIO_PREDICTION\\tSNAP\\t1\\nABINITIO_PREDICTION\\tGlimmerHMM\\t1' > weights.txt
+    echo -e 'ABINITIO_PREDICTION\\tGeneWise\\t2\\nTRANSCRIPT\\tassembler-{SPECIES}\\t10' >> weights.txt
     """ 
 
 rule EvidenceModeler_Commands:
@@ -285,7 +292,7 @@ rule EvidenceModeler_Commands:
         command  = join(PREDICT_DIR, "EVM", "commands.list")
     shell:"""
     cd {params.wkdir}
-    {EVIDENCE_DIR}/partition_EVM_inputs.pl --genome {input.ref} --gene_predictions {input.gene} \
+    {EVIDENCE_DIR}/EvmUtils/partition_EVM_inputs.pl --genome {input.ref} --gene_predictions {input.gene} \
          --transcript_alignments {input.trans} --segmentSize 100000 --overlapSize 10000 --partition_listing partitions_list.out 2> /dev/null
     {EVIDENCE_DIR}/EvmUtils/write_EVM_commands.pl --genome {input.ref} --weights {input.weight} \
       --gene_predictions {input.gene} \
@@ -303,7 +310,7 @@ rule EvidenceModler_Result:
         join(PREDICT_DIR, "EVM", "EVM.all.gff")
     threads: 30
     shell:"""
-    cd {prams.wkdir}
+    cd {params.wkdir}
     parallel --jobs {threads} < {input.command}
     {EVIDENCE_DIR}/EvmUtils/recombine_EVM_partial_outputs.pl --partitions partitions_list.out --output_file_name evm.out
     {EVIDENCE_DIR}/EvmUtils/convert_EVM_outputs_to_GFF3.pl --partitions partitions_list.out --output evm.out --genome {input.ref}
