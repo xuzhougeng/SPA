@@ -181,7 +181,7 @@ rule SNAP:
     output:
         join(PREDICT_DIR, "ab_initio", "snap.gff")
     shell:"""
-    {SNAP} {SNAP_HMM} {input} -quite -gff >  {output}
+    {SNAP} {SNAP_HMM} {input} -quiet -gff >  {output}
     """
 
 ## Homology based prediction
@@ -212,7 +212,7 @@ rule blastx2bed:
     shell:"""
     python3 scripts/blastx2bed.py {input} | bedtools sort -i - > {output}.tmp
     python3 scripts/blastx_bed_merge.py {output}.tmp > {output}
-    rm -f {ouput}.tmp
+    rm -f {output}.tmp
     """
 
 rule parallel_wise:
