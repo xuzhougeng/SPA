@@ -1,5 +1,7 @@
 # SPA: A (s)nakemake based (p)lant genome (a)nnotation pipline
 
+> 这个流程目前是非常的难用，估计会用的人就我一个，为了搞这个流程，我自己还写了好几个Python脚本来进行格式间的转换。
+
 This pipeline is designed for plant genome annotation. 
 
 If you want to use this tool, you may need to read <https://github.com/xuzhougeng/Notebook/blob/master/Notes/Pipeline/How-to-annotate-plant-genome.md>. This documents or tutorial record the learning process when I learning genome annotaiton. 
