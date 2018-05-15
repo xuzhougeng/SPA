@@ -133,7 +133,7 @@ rule de_novo_assembly:
         join(RNA_SEQ_DIR,"trinity","Trinity.fasta")
     threads: 40
     shell:"""
-    source activate assmebly
+    source activate assembly
     Trinity --seqType fq --max_memory 64G \
         --left {params.r1} \
         --right {params.r2} \
