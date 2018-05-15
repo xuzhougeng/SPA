@@ -46,7 +46,7 @@ ALL_BAM       = [join(RNA_SEQ_DIR, "{}_align.bam".format(sample)) for sample in 
 
 SNAP_GFF      = join(PREDICT_DIR, "ab_initio", "snap.gff")
 GLIMMER_GFF   = join(PREDICT_DIR, "ab_initio", "glimmer.gff")
-AUGUSTUS_GFF  = join(PREDICT_DIR, "ab_initio", "augustus","augustus.hints.gff3")
+AUGUSTUS_GFF  = join(PREDICT_DIR, "ab_initio", "augustus", "braker", SPECIES ,"augustus.hints.gff3")
 GENEWISE_GFF  = join(PREDICT_DIR, "homology", "genewise.gff")
 PASA_GFF      = join(PREDICT_DIR, "PASA", SPECIES+".pasa_assemblies.gff3")
 EVM_GFF       = join(PREDICT_DIR, "EVM", "EVM.all.gff")
@@ -168,7 +168,7 @@ rule Augustus:
         species = SPECIES,
         outdir  = join(PREDICT_DIR,"ab_initio","augustus")
     output:
-        join(PREDICT_DIR, "ab_initio", "augustus","augustus.hints.gff3")
+        join(PREDICT_DIR, "ab_initio", "augustus", "braker", SPECIES ,"augustus.hints.gff3")
     threads: 40
     shell:"""
     mkdir -p {params.outdir}

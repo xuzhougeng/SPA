@@ -20,11 +20,12 @@ def sub_seq_from_bed(params):
     protein = params[7]
 
     prefix = join("prediction", "homology", "genewise", dna + "_" + str(d_start) + "_" +str(d_end))
+    prtpath  = join(prefix, "prt.fa")
+
     if not exists(prefix):
         os.makedirs(prefix, exist_ok=True)
 
         # substract protein sequence
-        prtpath  = join(prefix, "prt.fa")
         prtshell = "seqkit faidx {} {} -o {}".format(protein, prt, prtpath)
         sp.run(prtshell, shell=True)
 
