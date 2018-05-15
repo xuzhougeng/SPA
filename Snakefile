@@ -31,8 +31,8 @@ PROTEIN     = abspath(join("input","protein.fa"))
 WORK_DIR       = os.getcwd()
 INPUT_DIR      = abspath("input")
 PREDICT_DIR    = abspath("prediction")
-RNA_SEQ_DIR    = abspath("RNA_seq")
 REPEAT_DIR     = abspath("repeat_masker")
+RNA_SEQ_DIR    = abspath("RNA_seq")
 TEMP_DIR       = abspath("temp")
 LOG_DIR        = abspath("log")
 
@@ -50,9 +50,18 @@ AUGUSTUS_GFF  = join(PREDICT_DIR, "ab_initio", "augustus","augustus.hints.gff3")
 GENEWISE_GFF  = join(PREDICT_DIR, "homology", "genewise.gff")
 PASA_GFF      = join(PREDICT_DIR, "PASA", SPECIES+".pasa_assemblies.gff3")
 EVM_GFF       = join(PREDICT_DIR, "EVM", "EVM.all.gff")
+
 rule all:
     input:
         MASKED_GENOME, SNAP_GFF, GLIMMER_GFF, AUGUSTUS_GFF, GENEWISE_GFF, PASA_GFF, EVM_GFF
+
+rule clean:
+    params:
+        pasa = join(PREDICT_DIR, "PASA")
+    shell:"""
+    rm -rf {params.pasa}
+    """
+
 
 # prepare the input from prediction
 ## genome mask with RepeatMasker
@@ -66,10 +75,17 @@ rule hard_mask:
         outdir  = "repeat_masker"
     threads: 30
     output:
-        join(INPUT_DIR, "genome_hard_mask.fa")
+        join(REPEAT_DIR, "genome.fa.masked")
     shell:"""
     {REPEATMASKER} -e {params.engine} -species {params.species} -pa {threads} -gff -dir {params.outdir} {input}
-    ln {params.outdir}/genome.fa.masked {output}
+    """
+rule mask_filter:
+    input:
+        join(REPEAT_DIR, "genome.fa.masked")
+    output:
+        join(INPUT_DIR, "genome_hard_mask.fa")
+    shell:"""
+    python3 scripts/masked_genome_filter.py {input} > {output}
     """
 
 ## rna-seq data clean
@@ -109,7 +125,7 @@ rule hisat2_align:
     output:
         join(RNA_SEQ_DIR, "{sample}_align.bam")
     log: join(LOG_DIR, "{sample}_hisat2.log")
-    threads: 30
+    threads: 20
     message: "use hisat2 to align RNA-seq data"
     shell:"""
     source activate align
@@ -131,7 +147,7 @@ rule de_novo_assembly:
         outdir = join(RNA_SEQ_DIR, "trinity")
     output:
         join(RNA_SEQ_DIR,"trinity","Trinity.fasta")
-    threads: 40
+    threads: 30
     shell:"""
     source activate assembly
     Trinity --seqType fq --max_memory 64G \
@@ -231,7 +247,7 @@ rule parallel_wise:
 ## PASA integration
 rule pasa_integration:
     input:
-        ref = REFERENCE,
+        ref = join(INPUT_DIR, "genome_hard_mask.fa"),
         transcript = join(RNA_SEQ_DIR,"trinity","Trinity.fasta")
     params:
         wkdir    = join(PREDICT_DIR, "PASA"),
@@ -244,7 +260,7 @@ rule pasa_integration:
     shell:"""
     mkdir -p {params.wkdir}
     cd {params.wkdir}   
-    cp -f {PASA_DIR}/pasa_conf/pasa.alignAssembly.Template.txt aligAssembly.config
+    cp -f {PASA_DIR}/pasa_conf/pasa.alignAssembly.Template.txt alignAssembly.config
     sed -i -e 's/<__DATABASE__>/{params.species}/' \
         -e 's/<__MIN_PERCENT_ALIGNED__>/{params.align}/' \
         -e  's/<__MIN_AVG_PER_ID__>/{params.identity}/' alignAssembly.config

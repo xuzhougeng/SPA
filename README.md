@@ -4,7 +4,7 @@
 
 This pipeline is designed for plant genome annotation. 
 
-If you want to use this tool, you may need to read <https://github.com/xuzhougeng/Notebook/blob/master/Notes/Pipeline/How-to-annotate-plant-genome.md>. This documents or tutorial record the learning process when I learning genome annotaiton. 
+If you want to use this tool, you may need to read [this](https://github.com/xuzhougeng/Notebook/blob/master/Notes/Pipeline/How-to-annotate-plant-genome.md). This documents or tutorial record the learning process when I explore genome annotaiton. 
 
 Becauses this pipeline is writed by Snakemake, you need install this excellent program firstly
 
@@ -37,8 +37,17 @@ For intermediate file process:
 
 - [NCBI-BLAST](https://blast.ncbi.nlm.nih.gov/Blast.cgi)
 - [seqkit](https://github.com/shenwei356/seqkit)
+- [samtools](https://github.com/samtools/samtools)
+- [bedtools](http://bedtools.readthedocs.io/en/latest/)
 
 I haven't develop a tool to configure these tools easily, may docker or install.sh? Who knows.
+
+Now, some tools can be installed by conda, and if not pipeline will be interrupution:
+
+```bash
+conda create -c bioconda -n align hisat2 samtools 
+conda create -c bioconda -n assembly trinity
+```
 
 To run the pipline, you should follow the steps below:
 
@@ -46,7 +55,7 @@ To run the pipline, you should follow the steps below:
 - create `input` directory under project's root directory, and cp or move the following files
     - genome.fa: genomic sequence
     - protein.fa: the homology species protein sequence
-- create `RNA_seq` directory under the project's root directory, and cp or move your RNA-seq data. The sample name should be listed in the samples.txt. For example, the sample name of "AB_1.fq, AB_2.fq" is AB.
+- create `RNA_seq` directory under the project's root directory, and cp or move your RNA-seq data. The sample name should be listed in the samples.txt. For example, the sample name of "AB\_1.fq, AB\_2.fq" is AB.
 - some program path should be modified in the `config.yaml`, if you not configure these file, I promise you will come across with a lot of error
 
 Before check-in, you need dry run the pipelne to check potential error:
@@ -59,4 +68,5 @@ If no warnings errors interrupt operation, you could actually run the pipline
 
 ```bash
 snakemake -j 30
+# -j --jobs
 ```
