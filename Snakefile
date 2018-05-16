@@ -1,5 +1,14 @@
 #!/usr/bin/env snakemake
 
+# author: xuzhogueng
+# contact mail: xuzhougeng@163.com
+
+# version change
+## version 0.1:   Finish the first version of this pipeline using braker2, SNAP, GlimmerHMM, genewise PASA and EVM
+## version 0.1.1: Add cleanpasa and cleanevm for interruption of runnning PASA and EVM
+## version 0.1.2: Remove SNAP as for it are not good as braker2 and GlimmerHMM when I check the results with naked eyes.
+
+
 # import python module
 import os
 from os.path import join
@@ -43,7 +52,8 @@ MASKED_GENOME = join(INPUT_DIR, "genome_hard_mask.fa")
 ALL_CLEAN_R1  = [join(RNA_SEQ_DIR, "{}_clean_1.fq".format(sample)) for sample in SAMPLES]
 ALL_CLEAN_R2  = [join(RNA_SEQ_DIR, "{}_clean_2.fq".format(sample)) for sample in SAMPLES]
 ALL_BAM       = [join(RNA_SEQ_DIR, "{}_align.bam".format(sample)) for sample in SAMPLES]
-
+ALL_GTF       = [join(RNA_SEQ_DIR, "{}.gtf".format(sample)) for sample in SAMPLES]
+Stringtie     = join(RNA_SEQ_DIR, "merged.gtf")
 SNAP_GFF      = join(PREDICT_DIR, "ab_initio", "snap.gff")
 GLIMMER_GFF   = join(PREDICT_DIR, "ab_initio", "glimmer.gff")
 AUGUSTUS_GFF  = join(PREDICT_DIR, "ab_initio", "augustus", "braker", SPECIES ,"augustus.hints.gff3")
@@ -53,15 +63,23 @@ EVM_GFF       = join(PREDICT_DIR, "EVM", "EVM.all.gff")
 
 rule all:
     input:
-        MASKED_GENOME, SNAP_GFF, GLIMMER_GFF, AUGUSTUS_GFF, GENEWISE_GFF, PASA_GFF, EVM_GFF
+        MASKED_GENOME, AUGUSTUS_GFF, GENEWISE_GFF, PASA_GFF, EVM_GFF
 
-rule clean:
+rule cleanpasa:
     params:
-        pasa = join(PREDICT_DIR, "PASA")
+        pasa = join(PREDICT_DIR, "PASA"),
+        evm  = join(PREDICT_DIR, "EVM")
     shell:"""
     rm -rf {params.pasa}
+    rm -rf {params.evm}
     """
 
+rule cleanevm:
+    params:
+        evm  = join(PREDICT_DIR, "EVM")
+    shell:"""
+    rm -rf {params.evm}
+    """
 
 # prepare the input from prediction
 ## genome mask with RepeatMasker
@@ -129,10 +147,31 @@ rule hisat2_align:
     message: "use hisat2 to align RNA-seq data"
     shell:"""
     source activate align
-    hisat2 --new-summary -p {threads} {params.prefix} \
+    hisat2 -dta --new-summary -p {threads} {params.prefix} \
         -1 {input.r1} -2 {input.r2} 2> {log} | samtools sort -@ 8 > {output}
     samtools index {output}
     """
+
+## use stringtie to assmebly RNA-seq
+rule stringtie:
+    input:
+        join(RNA_SEQ_DIR, "{sample}_align.bam")
+    output:
+        join(RNA_SEQ_DIR, "{sample}.gtf")
+    threads: 8
+    shell:"""
+        stringtie {input} -o {ouput} -p {threads}
+    """
+
+rule stringtie_merge:
+    input: 
+        ALL_GTF
+    output:
+        join(RNA_SEQ_DIR, "merged.gtf")
+    shell:"""
+    stringtie --merge {input} -o {output}
+    """
+    
 
 ## use trinity to assembly RNA-seq
 rule de_novo_assembly:
@@ -190,7 +229,7 @@ rule GlimmerHMM:
     ls {params.tmp} | while read id; do echo "{Glimmer}  {params.tmp}/${{id}} -d {GlimmerHMM}" -g; done \
         | parallel -j {threads} > {output}
     """
-
+# not be used for it's poor perfornance
 rule SNAP:
     input:
         ref = join(INPUT_DIR, "genome_hard_mask.fa")
@@ -272,7 +311,7 @@ rule pasa_integration:
 rule EvidenceModeler_Prepartion:
     input:
         ref      = REFERENCE,
-        snap     = SNAP_GFF,
+        #stringtie= Stringtie,
         genewise = GENEWISE_GFF,
         glimmer  = GLIMMER_GFF,
         augustus = AUGUSTUS_GFF,
@@ -286,13 +325,12 @@ rule EvidenceModeler_Prepartion:
     shell:"""
     mkdir -p {params.wkdir}
     python {WORK_DIR}/scripts/glimmer2gff3.py {input.glimmer} > {params.wkdir}/glimmer.gff3 
-    python {WORK_DIR}/scripts/snap2gff3.py {input.snap} > {params.wkdir}/snap.gff3
     python {WORK_DIR}/scripts/wise2gff3.py {input.genewise} > {params.wkdir}/genewise.gff3
     ln {input.augustus} {params.wkdir}/augustus.gff3
     ln {input.pasa} {params.wkdir}/transcript_alignments.gff3
     cd {params.wkdir}
     cat {params.wkdir}/augustus.gff3 {params.wkdir}/glimmer.gff3 {params.wkdir}/snap.gff3 {params.wkdir}/genewise.gff3 > gene_prediction.gff3
-    echo -e 'ABINITIO_PREDICTION\\tAUGUSTUS\\t3\\nABINITIO_PREDICTION\\tSNAP\\t1\\nABINITIO_PREDICTION\\tGlimmerHMM\\t1' > weights.txt
+    echo -e 'ABINITIO_PREDICTION\\tAUGUSTUS\\t3\\nABINITIO_PREDICTION\\tGlimmerHMM\\t1' > weights.txt
     echo -e 'ABINITIO_PREDICTION\\tGeneWise\\t2\\nTRANSCRIPT\\tassembler-{SPECIES}\\t10' >> weights.txt
     """ 
 

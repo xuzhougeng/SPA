@@ -70,3 +70,23 @@ If no warnings errors interrupt operation, you could actually run the pipline
 snakemake -j 30
 # -j --jobs
 ```
+
+## some useful tools
+
+I write small tools for parallel running genewise and convert genewise's gff output to EvidenceModeler accepted format. Thses scripts are `blastx2bed.py`, `blastx_bed_merge.py`, `parallel_genewise.py`, `merge_parallel_genewise_out.py` and the `wise2gff3.py`
+
+
+```bash
+blastx -query query_dna.fa -db target_protein.fa -outfmt 6 -best_hit_overhang 0.25 -best_hit_score_edge 0.25 > blastx_fmt6.out
+python3 blast2bed.py blastx_fmt6.out | bedtools sort -i - > blastx.bed.tmp
+python3 blastx_bed_merge.py blastx.bed.tmp > blastx_merged.bed
+python3 parallel_genewise.py query_dna.fa target_protein.fa blastx_merged.bed
+python3 merge_parallel_genewise_out.py blastx_merged.bed > genewise.gff3
+
+```
+
+
+
+
+
+
