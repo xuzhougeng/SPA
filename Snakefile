@@ -7,6 +7,7 @@
 ## version 0.1:   Finish the first version of this pipeline using braker2, SNAP, GlimmerHMM, genewise PASA and EVM
 ## version 0.1.1: Add cleanpasa and cleanevm for interruption of runnning PASA and EVM
 ## version 0.1.2: Remove SNAP as for it are not good as braker2 and GlimmerHMM when I check the results with naked eyes.
+## version 0.2:   Add StringTie to assembly transcript and TransDecoder to predict Coding sequence For EvidenceModeler
 
 
 # import python module
@@ -25,11 +26,9 @@ BLAST_BIN    = config['BLAST_BIN']
 BRAKER       = config["BRAKER"]
 Glimmer      = config["Glimmer"]
 GlimmerHMM   = config["GlimmerHMM"]
-SNAP         = config["SNAP"]
-SNAP_HMM     = config['SNAP_HMM']
+TRANSDECODE  = config['TRANSDECODE']
 PASA_DIR     = config['PASA_DIR']
 EVIDENCE_DIR = config['EVIDENCE_DIR']
-
 ## input file
 REFERENCE   = abspath(join("input","genome.fa"))
 SPECIES     = config['SPECIES']
@@ -37,24 +36,23 @@ SAMPLES     = [line.strip() for line in open(config['SAMPLES'])]
 PROTEIN     = abspath(join("input","protein.fa"))
 
 # directory
-WORK_DIR       = os.getcwd()
-INPUT_DIR      = abspath("input")
-PREDICT_DIR    = abspath("prediction")
-REPEAT_DIR     = abspath("repeat_masker")
-RNA_SEQ_DIR    = abspath("RNA_seq")
-TEMP_DIR       = abspath("temp")
-LOG_DIR        = abspath("log")
+WORK_DIR        = os.getcwd()
+INPUT_DIR       = abspath("input")
+PREDICT_DIR     = abspath("prediction")
+REPEAT_DIR      = abspath("repeat_masker")
+RNA_SEQ_DIR     = abspath("RNA_seq")
+TRANSDECODER_DIR= join(PREDICT_DIR, "transdecoder")
+TEMP_DIR        = abspath("temp")
+LOG_DIR         = abspath("log")
 
-shell("mkdir -p {INPUT_DIR} {PREDICT_DIR} {RNA_SEQ_DIR} {REPEAT_DIR} {TEMP_DIR} {LOG_DIR}")
+shell("mkdir -p {INPUT_DIR} {PREDICT_DIR} {RNA_SEQ_DIR} {TRANSDECODER_DIR} {REPEAT_DIR} {TEMP_DIR} {LOG_DIR}")
 
 # output file
 MASKED_GENOME = join(INPUT_DIR, "genome_hard_mask.fa")
 ALL_CLEAN_R1  = [join(RNA_SEQ_DIR, "{}_clean_1.fq".format(sample)) for sample in SAMPLES]
 ALL_CLEAN_R2  = [join(RNA_SEQ_DIR, "{}_clean_2.fq".format(sample)) for sample in SAMPLES]
 ALL_BAM       = [join(RNA_SEQ_DIR, "{}_align.bam".format(sample)) for sample in SAMPLES]
-ALL_GTF       = [join(RNA_SEQ_DIR, "{}.gtf".format(sample)) for sample in SAMPLES]
-Stringtie     = join(RNA_SEQ_DIR, "merged.gtf")
-SNAP_GFF      = join(PREDICT_DIR, "ab_initio", "snap.gff")
+TRANSDECODE   = join(TRANSDECODER_DIR, "transdecoder.gff3")
 GLIMMER_GFF   = join(PREDICT_DIR, "ab_initio", "glimmer.gff")
 AUGUSTUS_GFF  = join(PREDICT_DIR, "ab_initio", "augustus", "braker", SPECIES ,"augustus.hints.gff3")
 GENEWISE_GFF  = join(PREDICT_DIR, "homology", "genewise.gff")
@@ -147,31 +145,47 @@ rule hisat2_align:
     message: "use hisat2 to align RNA-seq data"
     shell:"""
     source activate align
-    hisat2 -dta --new-summary -p {threads} {params.prefix} \
+    hisat2 --dta --new-summary -p {threads} -x {params.prefix} \
         -1 {input.r1} -2 {input.r2} 2> {log} | samtools sort -@ 8 > {output}
     samtools index {output}
     """
 
 ## use stringtie to assmebly RNA-seq
-rule stringtie:
+rule StringTie:
     input:
-        join(RNA_SEQ_DIR, "{sample}_align.bam")
-    output:
-        join(RNA_SEQ_DIR, "{sample}.gtf")
-    threads: 8
-    shell:"""
-        stringtie {input} -o {ouput} -p {threads}
-    """
-
-rule stringtie_merge:
-    input: 
-        ALL_GTF
+        ALL_BAM
+    params:
+        tmp = join(RNA_SEQ_DIR, "merged.bam")
     output:
         join(RNA_SEQ_DIR, "merged.gtf")
+    threads: 6
+    message: "merge {ALL_BAM} into single bam and using StringTie to assembly"
     shell:"""
-    stringtie --merge {input} -o {output}
+    source activate assembly
+    samtools -@ {threads} {params.tmp} {input}
+    stringtie -o {ouput} -p {threads} {params.tmp}
     """
-    
+
+rule TransDecoder:
+    input:
+        ref = REFERENCE,
+        gtf = join(RNA_SEQ_DIR, "merged.gtf")
+    params:
+        wkdir = TRANSDECODER_DIR
+    output:
+        join(TRANSDECODER_DIR, "transdecoder.gff3")
+    shell:"""
+    cd {params.wkdir}
+    {TRANSDECODE}/util/gtf_genome_to_cdna_fasta.pl {input.gtf} {input.ref} > {params.wkdir}/transcripts.fasta
+    {TRANSDECODE}/util/gtf_to_alignment_gff3.pl {input.gtf} > {params.wkdir}/transcripts.gff3
+    {TRANSDECODE}/TransDecoder.LongOrfs -t {params.wkdir}/transcripts.fasta
+    {TRANSDECODE}/TransDecoder.Predict -t {params.wkdir}/transcripts.fasta
+    {TRANSDECODE}/util/cdna_alignment_orf_to_genome_orf.pl \
+         {params.wkdir}/transcripts.fasta.transdecoder.gff3 \
+         {params.wkdir}/transcripts.gff3 \
+         {params.wkdir}/transcripts.fasta > {output}
+    """
+
 
 ## use trinity to assembly RNA-seq
 rule de_novo_assembly:
@@ -229,15 +243,6 @@ rule GlimmerHMM:
     ls {params.tmp} | while read id; do echo "{Glimmer}  {params.tmp}/${{id}} -d {GlimmerHMM}" -g; done \
         | parallel -j {threads} > {output}
     """
-# not be used for it's poor perfornance
-rule SNAP:
-    input:
-        ref = join(INPUT_DIR, "genome_hard_mask.fa")
-    output:
-        join(PREDICT_DIR, "ab_initio", "snap.gff")
-    shell:"""
-    {SNAP} {SNAP_HMM} {input} -quiet -gff >  {output}
-    """
 
 ## Homology based prediction
 ## blastx
@@ -292,7 +297,7 @@ rule pasa_integration:
         wkdir    = join(PREDICT_DIR, "PASA"),
         species  = SPECIES,
         align    = "80",
-        identity = "90"
+        identity = "80"
     output:
         join(PREDICT_DIR, "PASA", SPECIES+".pasa_assemblies.gff3")
     threads: 20
@@ -311,27 +316,36 @@ rule pasa_integration:
 rule EvidenceModeler_Prepartion:
     input:
         ref      = REFERENCE,
-        #stringtie= Stringtie,
         genewise = GENEWISE_GFF,
+        transdecode = TRANSDECODE,
         glimmer  = GLIMMER_GFF,
         augustus = AUGUSTUS_GFF,
         pasa     = PASA_GFF
     params:
-        wkdir    = join(PREDICT_DIR, "EVM"),
+        wkdir      = join(PREDICT_DIR, "EVM"),
+        genewise   = "2",
+        transdecode= "7",
+        glimmer    = "1",
+        augustus   = "2",
+        pasa       = "6"
     output:
         join(PREDICT_DIR, "EVM", "gene_prediction.gff3"),
         join(PREDICT_DIR, "EVM", "transcript_alignments.gff3"),
+        join(PREDICT_DIR, "EVM", "transdecode.gff3"),
         join(PREDICT_DIR, "EVM", "weights.txt") 
     shell:"""
     mkdir -p {params.wkdir}
     python {WORK_DIR}/scripts/glimmer2gff3.py {input.glimmer} > {params.wkdir}/glimmer.gff3 
     python {WORK_DIR}/scripts/wise2gff3.py {input.genewise} > {params.wkdir}/genewise.gff3
-    ln {input.augustus} {params.wkdir}/augustus.gff3
-    ln {input.pasa} {params.wkdir}/transcript_alignments.gff3
+    ln -f {input.augustus} {params.wkdir}/augustus.gff3
+    ln -f {input.pasa} {params.wkdir}/transcript_alignments.gff3
+    ln -f {input.transdecode} {params.wkdir}/transdecode.gff3
     cd {params.wkdir}
-    cat {params.wkdir}/augustus.gff3 {params.wkdir}/glimmer.gff3 {params.wkdir}/snap.gff3 {params.wkdir}/genewise.gff3 > gene_prediction.gff3
-    echo -e 'ABINITIO_PREDICTION\\tAUGUSTUS\\t3\\nABINITIO_PREDICTION\\tGlimmerHMM\\t1' > weights.txt
-    echo -e 'ABINITIO_PREDICTION\\tGeneWise\\t2\\nTRANSCRIPT\\tassembler-{SPECIES}\\t10' >> weights.txt
+    cat {params.wkdir}/augustus.gff3 {params.wkdir}/glimmer.gff3  {params.wkdir}/genewise.gff3  {params.wkdir}/transdecode.gff3 > gene_prediction.gff3
+    echo -e 'ABINITIO_PREDICTION\\tAUGUSTUS\\t{params.augustus}\\nABINITIO_PREDICTION\\tGlimmerHMM\\t{params.glimmer}' > weights.txt
+    echo -e 'ABINITIO_PREDICTION\\tGeneWise\\t{params.genewise}' >> weights.txt
+    echo -e 'TRANSCRIPT\\tassembler-{SPECIES}\\t{params.pasa}' >> weights.txt
+    echo -e 'OTHER_PREDICTION\\ttransdecoder\\t{params.transdecode}' >> weights.txt
     """ 
 
 rule EvidenceModeler_Commands:
@@ -342,12 +356,15 @@ rule EvidenceModeler_Commands:
         weight = join(PREDICT_DIR, "EVM", "weights.txt") 
     params:
         wkdir    = join(PREDICT_DIR, "EVM"),
+        segmentSize = 1000000,
+        overlapSize = 10000,
     output:
         command  = join(PREDICT_DIR, "EVM", "commands.list")
     shell:"""
     cd {params.wkdir}
     {EVIDENCE_DIR}/EvmUtils/partition_EVM_inputs.pl --genome {input.ref} --gene_predictions {input.gene} \
-         --transcript_alignments {input.trans} --segmentSize 100000 --overlapSize 10000 --partition_listing partitions_list.out 2> /dev/null
+         --transcript_alignments {input.trans} --segmentSize {params.segmentSize} --overlapSize {params.overlapSize}\
+         --partition_listing partitions_list.out 2> /dev/null
     {EVIDENCE_DIR}/EvmUtils/write_EVM_commands.pl --genome {input.ref} --weights {input.weight} \
       --gene_predictions {input.gene} \
       --transcript_alignments {input.trans} \
@@ -362,7 +379,7 @@ rule EvidenceModler_Result:
         wkdir    = join(PREDICT_DIR, "EVM")
     output:
         join(PREDICT_DIR, "EVM", "EVM.all.gff")
-    threads: 30
+    threads: 40
     shell:"""
     cd {params.wkdir}
     parallel --jobs {threads} < {input.command}
