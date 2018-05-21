@@ -73,13 +73,16 @@ snakemake -j 30
 
 ## Scripts Usage
 
-I write small tools for parallel running genewise and convert genewise's gff output to EvidenceModeler accepted format. Thses scripts are `blastx2bed.py`, `blastx_bed_merge.py`, `parallel_genewise.py`, `merge_parallel_genewise_out.py` and the `wise2gff3.py`
+I write small tools for parallel running genewise and convert genewise's gff output to EvidenceModeler accepted format. Thses scripts are `blastx2bed.py`, `blastx_bed_merge.py`, `parallel_genewise.py`, `merge_parallel_genewise_out.py` and the `wise2gff3.py`.
 
+> Make sure that your Python is 3.6+, and seqkit and genewise should be in your environments, The results will export to "prediction/homology/genewise"
 
 ```bash
 blastx -query query_dna.fa -db target_protein.fa -outfmt 6 -best_hit_overhang 0.25 -best_hit_score_edge 0.25 > blastx_fmt6.out
-python3 blast2bed.py blastx_fmt6.out | bedtools sort -i - > blastx.bed.tmp
+python3 blastx2bed.py blastx_fmt6.out | bedtools sort -i - > blastx.bed.tmp
 python3 blastx_bed_merge.py blastx.bed.tmp > blastx_merged.bed
 python3 parallel_genewise.py query_dna.fa target_protein.fa blastx_merged.bed
 python3 merge_parallel_genewise_out.py blastx_merged.bed > genewise.gff3
 ```
+
+These scripts are just server for my pipeline, will not maintain, be care of these.

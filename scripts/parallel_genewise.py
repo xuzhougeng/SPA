@@ -26,14 +26,14 @@ def sub_seq_from_bed(params):
         os.makedirs(prefix, exist_ok=True)
 
         # substract protein sequence
-        prtshell = "seqkit faidx {} {} -o {}".format(protein, prt, prtpath)
+        prtshell = "seqkit faidx {} '{}' -o {}".format(protein, prt, prtpath)
         sp.run(prtshell, shell=True)
 
     # substract dna sequence if reverse then reverse complement
     dnapath  = join(prefix, "dna.fa")
     if not exists(dnapath): 
         region   = str(d_start) + "-" + str(d_end)
-        dnashell = "seqkit faidx {} {}:{} -o {}".format(genome, dna, region, dnapath )
+        dnashell = "seqkit faidx {} '{}:{}' -o {}".format(genome, dna, region, dnapath )
         sp.run(dnashell, shell=True)
     
     # run genewise
