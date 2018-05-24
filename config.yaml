@@ -11,3 +11,4 @@ TRANSDECODE: "~/opt/biosoft/TransDecoder-v5.3.0"
 
 SAMPLES: "samples.txt"
 SPECIES: "cocculata"
+NOMINATE: "CAROC"

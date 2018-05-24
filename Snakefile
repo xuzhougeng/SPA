@@ -18,6 +18,7 @@ from os.path import basename
 
 # configuration
 configfile: "config.yaml"
+
 ## repeat makser 
 REPEATMASKER = config['REPEATMASKER']
 BLAST_BIN    = config['BLAST_BIN']
@@ -34,6 +35,7 @@ REFERENCE   = abspath(join("input","genome.fa"))
 SPECIES     = config['SPECIES']
 SAMPLES     = [line.strip() for line in open(config['SAMPLES'])]
 PROTEIN     = abspath(join("input","protein.fa"))
+NOMINATE    = config['NOMINATE']
 
 # directory
 WORK_DIR        = os.getcwd()
@@ -42,6 +44,7 @@ PREDICT_DIR     = abspath("prediction")
 REPEAT_DIR      = abspath("repeat_masker")
 RNA_SEQ_DIR     = abspath("RNA_seq")
 TRANSDECODER_DIR= join(PREDICT_DIR, "transdecoder")
+REPORT_DIR      = abspath("report")
 TEMP_DIR        = abspath("temp")
 LOG_DIR         = abspath("log")
 
@@ -58,10 +61,11 @@ AUGUSTUS_GFF  = join(PREDICT_DIR, "ab_initio", "augustus", "braker", SPECIES ,"a
 GENEWISE_GFF  = join(PREDICT_DIR, "homology", "genewise.gff")
 PASA_GFF      = join(PREDICT_DIR, "PASA", SPECIES+".pasa_assemblies.gff3")
 EVM_GFF       = join(PREDICT_DIR, "EVM", "EVM.all.gff")
+RESULT        = join(REPORT_DIR, "annotation.gff") 
 
 rule all:
     input:
-        MASKED_GENOME, AUGUSTUS_GFF, GENEWISE_GFF, PASA_GFF, EVM_GFF
+        MASKED_GENOME, AUGUSTUS_GFF, GENEWISE_GFF, PASA_GFF, EVM_GFF, RESULT
 
 rule cleanpasa:
     params:
@@ -386,4 +390,13 @@ rule EvidenceModler_Result:
     {EVIDENCE_DIR}/EvmUtils/recombine_EVM_partial_outputs.pl --partitions partitions_list.out --output_file_name evm.out
     {EVIDENCE_DIR}/EvmUtils/convert_EVM_outputs_to_GFF3.pl --partitions partitions_list.out --output evm.out --genome {input.ref}
     find . -regex ".*evm.out.gff3" -exec cat {{}} \; > {output}
+    """
+# gene Name
+rule gffrename:
+    input:
+        gff = join(PREDICT_DIR, "EVM", "EVM.all.gff")
+    output:
+        join(REPORT_DIR, "annotation.gff") 
+    shell:"""
+    python {WORK_DIR}/scripts/gffrename.py {input} {NOMINATE} > {output}
     """
